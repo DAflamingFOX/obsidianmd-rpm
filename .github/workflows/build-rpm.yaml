@@ -17,26 +17,27 @@ jobs:
       - name: Check version and download source
         run: bash check_version.sh
 
+      - name: Install RPM Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm createrepo-c
+
       - name: Build RPM package
-        uses: xmidt-org/rpm-package-action@v2
-        with:
-          path: .
-          spec: obsidian.spec
-          rpmbuild-args: --define "_version ${{ env.VERSION }}"
+        run: |
+          rpmbuild -bb obsidian.spec \
+            --define "_version ${{ env.VERSION }}" \
+            --define "_sourcedir $PWD" \
+            --define "_rpmdir $PWD/output"
 
       - name: Setup RPM Repository directory
         run: |
           # Create the folder structure for the repository
           mkdir -p public/x86_64
           # Move the newly built RPM into the repository folder
-          cp **/*.rpm public/x86_64/
+          cp output/x86_64/*.rpm public/x86_64/
 
       - name: Generate Repository Metadata
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y createrepo-c
-          # Generate the repo index files
-          createrepo_c public/x86_64/
+        run: createrepo_c public/x86_64/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
