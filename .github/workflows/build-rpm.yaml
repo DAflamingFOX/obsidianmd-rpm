@@ -12,7 +12,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Check version and download source
         run: bash check_version.sh
@@ -29,15 +29,54 @@ jobs:
             --define "_sourcedir $PWD" \
             --define "_rpmdir $PWD/output"
 
+      - name: Upload RPM to GitHub Releases
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Obsidian v${{ env.VERSION }}
+          files: output/x86_64/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup RPM Repository directory
         run: |
-          # Create the folder structure for the repository
           mkdir -p public/x86_64
-          # Move the newly built RPM into the repository folder
+          # Move the RPM into the repo folder temporarily to generate the index
           cp output/x86_64/*.rpm public/x86_64/
 
       - name: Generate Repository Metadata
-        run: createrepo_c public/x86_64/
+        run: |
+          # Generate the repo index files
+          createrepo_c public/x86_64/
+
+          # Delete the massive RPM file so we don't push it to the gh-pages branch
+          rm public/x86_64/*.rpm
+
+      - name: Redirect the repo index to the Release URL
+        run: |
+          # The primary.xml file tells the package manager where to download the RPM.
+          # We need to change the "location href" from the local file path to the absolute URL
+          # of the GitHub Release we just created.
+
+          cd public/x86_64/repodata/
+
+          # Uncompress the primary.xml
+          gunzip *-primary.xml.gz
+
+          # Find the exact filename of the RPM we built
+          RPM_NAME=$(basename ../../output/x86_64/*.rpm)
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/${RPM_NAME}"
+
+          # Replace the local path with the remote download URL
+          sed -i "s|href=\"${RPM_NAME}\"|href=\"${DOWNLOAD_URL}\"|g" *-primary.xml
+
+          # Recompress
+          gzip *-primary.xml
+
+          # Because we modified the primary.xml, its checksum changed.
+          # We must regenerate the repomd.xml so package managers trust it.
+          cd ../../
+          createrepo_c --update public/x86_64/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
