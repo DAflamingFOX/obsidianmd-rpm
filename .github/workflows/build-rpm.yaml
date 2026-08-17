@@ -1,0 +1,45 @@
+name: Build and Publish Obsidian RPM
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: https://github.com/actions/checkout@v7
+
+      - name: Check version and download source
+        run: bash check_version.sh
+
+      - name: Build RPM package
+        uses: https://github.com/xmidt-org/rpm-package-action@v2
+        with:
+          path: .
+          spec: obsidian.spec
+          rpmbuild-args: --define "_version ${{ env.VERSION }}"
+
+      - name: Setup RPM Repository directory
+        run: |
+          # Create the folder structure for the repository
+          mkdir -p public/x86_64
+          # Move the newly built RPM into the repository folder
+          cp **/*.rpm public/x86_64/
+
+      - name: Generate Repository Metadata
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y createrepo-c
+          # Generate the repo index files
+          createrepo_c public/x86_64/
+
+      - name: Deploy to GitHub Pages
+        uses: https://github.com/peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
