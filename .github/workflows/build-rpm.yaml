@@ -1,0 +1,103 @@
+name: Build and Publish Obsidian RPM
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check version and calculate release number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get latest Obsidian version
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | grep '"tag_name":' | cut -d '"' -f 4 | sed 's/v//')
+          echo "Latest Obsidian version is $LATEST_VERSION"
+
+          # Check if a release for this version already exists in repo
+          if gh release view "v$LATEST_VERSION" > /dev/null 2>&1; then
+            echo "Release v$LATEST_VERSION already exists."
+
+            # If this is an cron run, all is good.
+            if [ "${{ github.event_name }}" == "schedule" ]; then
+              echo "Cron run: No new version found. Skipping build."
+              echo "SKIP_BUILD=true" >> $GITHUB_ENV
+              exit 0
+            fi
+
+            # If manually running via "Run workflow," bump the release number
+            echo "Manual run: Bumping release number."
+            # Find the highest existing release number from the uploaded RPM files
+            HIGHEST_REL=$(gh release view "v$LATEST_VERSION" --json assets -q '.assets[].name' | grep -oP "(?<=${LATEST_VERSION}-)[0-9]+" | sort -n | tail -1)
+
+            if [ -z "$HIGHEST_REL" ]; then
+              PKG_REL=1
+            else
+              PKG_REL=$((HIGHEST_REL + 1))
+            fi
+          else
+            # New version of Obsidian
+            echo "New Obsidian version."
+            PKG_REL=1
+          fi
+
+          echo "Building Version: $LATEST_VERSION, Release: $PKG_REL"
+          echo "VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+          echo "PKG_REL=$PKG_REL" >> $GITHUB_ENV
+
+          # Download the source tar.gz
+          wget "https://github.com/obsidianmd/obsidian-releases/releases/download/v${LATEST_VERSION}/obsidian-${LATEST_VERSION}.tar.gz"
+
+      - name: Install RPM Build Tools
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm createrepo-c
+
+      - name: Build RPM package
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          rpmbuild -bb obsidian.spec \
+            --define "_version ${{ env.VERSION }}" \
+            --define "_pkgrel ${{ env.PKG_REL }}" \
+            --define "_sourcedir $PWD" \
+            --define "_rpmdir $PWD/output"
+
+      - name: Upload RPM to GitHub Releases
+        if: env.SKIP_BUILD != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Obsidian v${{ env.VERSION }}
+          files: output/x86_64/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Repository Metadata
+        if: env.SKIP_BUILD != 'true'
+        run: |
+          mkdir -p public/x86_64
+
+          # Copy the RPMs here temporarily so createrepo_c can index it
+          cp output/x86_64/*.rpm public/x86_64/
+
+          # Generate the repo index using the GitHub Release URL as the base
+          createrepo_c --baseurl="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/" public/x86_64/
+
+          # Delete the RPM files so they aren't pushed to gh-pages
+          rm public/x86_64/*.rpm
+
+      - name: Deploy to GitHub Pages
+        if: env.SKIP_BUILD != 'true'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public

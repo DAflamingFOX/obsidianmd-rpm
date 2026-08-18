@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Obsidian
+Exec=/opt/Obsidian/obsidian %U
+Terminal=false
+Type=Application
+Icon=obsidian
+StartupWMClass=md.obsidian.Obsidian
+Comment=Obsidian knowledge base
+Categories=Office;
