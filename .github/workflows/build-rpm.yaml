@@ -18,8 +18,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get latest Obsidian version
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | grep '"tag_name":' | cut -d '"' -f 4 | sed 's/v//')
+          # Get latest Obsidian version (filtering out mobile-only or prerelease versions)
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/obsidianmd/obsidian-releases/releases | jq -r '.[] | select(.prerelease == false) | .assets[].name' | grep -oP '^obsidian-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.tar\.gz)' | head -n 1)
           echo "Latest Obsidian version is $LATEST_VERSION"
 
           # Check if a release for this version already exists in repo
