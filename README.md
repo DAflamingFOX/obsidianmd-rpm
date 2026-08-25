@@ -1,5 +1,7 @@
 # Obsidian RPM Repository
 
+[![Build and Publish Obsidian RPM](https://github.com/DAflamingFOX/obsidianmd-rpm/actions/workflows/build-rpm.yaml/badge.svg)](https://github.com/DAflamingFOX/obsidianmd-rpm/actions/workflows/build-rpm.yaml)
+
 This repository provides an automated build pipeline that tracks new releases of [Obsidian.md](https://obsidian.md/), packages the official `.tar.gz` Linux release into an RPM, and hosts it as a standard package repository using GitHub Pages.
 
 This allows Fedora, RHEL, CentOS, and openSUSE users to install and update Obsidian using their native package managers.
