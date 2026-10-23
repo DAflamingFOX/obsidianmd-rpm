@@ -48,26 +48,6 @@ sudo dnf install obsidian
 
 Updates to Obsidian will be handled automatically whenever you run standard system updates (`sudo dnf upgrade`).
 
-## Maintainer Setup: GPG Signing
-
-Repository packages and metadata are signed using GPG. To configure automated signing in GitHub Actions:
-
-1. Generate a GPG key pair (if not already created):
-   ```bash
-   gpg --quick-gen-key "Obsidian Packaging <packaging@example.com>" default default never
-   ```
-2. Export the ASCII-armored private key:
-   ```bash
-   gpg --armor --export-secret-keys <KEY_ID>
-   ```
-3. In GitHub, navigate to **Settings** &rarr; **Secrets and variables** &rarr; **Actions** and add the following repository secrets:
-   - `GPG_PRIVATE_KEY`: The exported ASCII-armored private key.
-   - `GPG_KEY_ID`: *(Optional)* The key ID or fingerprint. If omitted, the build pipeline automatically detects it from the imported key.
-   - `GPG_PASSPHRASE`: *(Optional)* The passphrase for the private key (required if the key was created with a passphrase).
-
-> [!NOTE]
-> If `GPG_PRIVATE_KEY` is not set, the build pipeline gracefully falls back to generating unsigned metadata with `gpgcheck=0`, ensuring builds do not fail while GPG keys are being configured.
-
 ## License
 
 The files in this repository are licensed under the **MIT License**.
