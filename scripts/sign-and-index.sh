@@ -20,14 +20,70 @@ VERSION="${VERSION:-1.7.7}"
 # Check for GPG private key
 if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
     echo "=== GPG Signing Enabled ==="
+
+    # Configure gpg and gpg-agent for headless, non-interactive signing
+    GNUPG_DIR="${GNUPGHOME:-$HOME/.gnupg}"
+    mkdir -p "$GNUPG_DIR"
+    chmod 700 "$GNUPG_DIR"
+
+    cat << 'EOF' > "$GNUPG_DIR/gpg-agent.conf"
+allow-loopback-pinentry
+allow-preset-passphrase
+default-cache-ttl 34560000
+max-cache-ttl 34560000
+EOF
+    chmod 600 "$GNUPG_DIR/gpg-agent.conf"
+
+    cat << 'EOF' > "$GNUPG_DIR/gpg.conf"
+use-agent
+pinentry-mode loopback
+batch
+yes
+EOF
+    chmod 600 "$GNUPG_DIR/gpg.conf"
+
+    # Reload agent configuration
+    gpg-connect-agent reloadagent /bye >/dev/null 2>&1 || true
+
     echo "Importing GPG private key into keyring..."
-    echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+    if [ -n "${GPG_PASSPHRASE:-}" ]; then
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import
+    else
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --import
+    fi
 
     # Determine GPG key ID
     if [ -z "${GPG_KEY_ID:-}" ]; then
         GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec:' | head -n 1 | cut -d: -f5)
     fi
     echo "Using GPG key ID: ${GPG_KEY_ID}"
+
+    # Preset passphrase in gpg-agent if gpg-preset-passphrase is available
+    PRESET_BIN="$(find /usr -name gpg-preset-passphrase 2>/dev/null | head -n 1 || true)"
+    if [ -n "$PRESET_BIN" ] && [ -x "$PRESET_BIN" ]; then
+        KEYGRIPS=$(gpg --with-colons --with-keygrip --list-secret-keys "${GPG_KEY_ID}" | grep "^grp:" | cut -d: -f10 || true)
+        for grip in $KEYGRIPS; do
+            "$PRESET_BIN" --preset -P "${GPG_PASSPHRASE:-}" "$grip" 2>/dev/null || true
+        done
+    fi
+
+    # Verify key can sign data non-interactively
+    TEST_SIGN_ARGS="--batch --yes --detach-sign --armor --pinentry-mode loopback --local-user ${GPG_KEY_ID}"
+    if [ -n "${GPG_PASSPHRASE:-}" ]; then
+        TEST_SIGN_ARGS="$TEST_SIGN_ARGS --passphrase ${GPG_PASSPHRASE}"
+    fi
+    if ! echo "gpg test" | gpg $TEST_SIGN_ARGS -o /dev/null 2>/dev/null; then
+        echo "ERROR: Unable to sign test payload with GPG key ${GPG_KEY_ID}." >&2
+        echo "If the key is protected by a passphrase, ensure GPG_PASSPHRASE is set in GitHub Secrets." >&2
+        exit 1
+    fi
+    echo "GPG key ${GPG_KEY_ID} verified for headless signing."
+
+    # Build rpmsign extra args
+    RPM_GPG_EXTRA="--batch --yes --pinentry-mode loopback"
+    if [ -n "${GPG_PASSPHRASE:-}" ]; then
+        RPM_GPG_EXTRA="$RPM_GPG_EXTRA --passphrase \"${GPG_PASSPHRASE}\""
+    fi
 
     # Export public key
     echo "Exporting public key to ${PUBKEY_DEST}..."
@@ -39,7 +95,11 @@ if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
         for rpm_file in "$RPM_DIR"/*.rpm; do
             if [ -f "$rpm_file" ]; then
                 echo "Signing ${rpm_file}..."
-                rpmsign --addsign --define "_gpg_name ${GPG_KEY_ID}" --define "_gpg_digest_algo sha256" "$rpm_file"
+                rpmsign --addsign \
+                    --define "_gpg_name ${GPG_KEY_ID}" \
+                    --define "_gpg_digest_algo sha256" \
+                    --define "_gpg_sign_cmd_extra_args ${RPM_GPG_EXTRA}" \
+                    "$rpm_file"
             fi
         done
     fi
@@ -54,7 +114,6 @@ gpgcheck=1
 repo_gpgcheck=1
 gpgkey=https://daflamingfox.github.io/obsidianmd-rpm/RPM-GPG-KEY-obsidian
 EOF
-
 else
     echo "=== GPG Signing Disabled (Contingency Fallback) ===" >&2
     echo "WARNING: GPG_PRIVATE_KEY environment variable is not set." >&2
@@ -86,7 +145,11 @@ if [ -f obsidian-repo.spec ]; then
     if [ -n "$BUILT_REPO_RPM" ] && [ -f "$BUILT_REPO_RPM" ]; then
         if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
             echo "Signing ${BUILT_REPO_RPM}..."
-            rpmsign --addsign --define "_gpg_name ${GPG_KEY_ID}" --define "_gpg_digest_algo sha256" "$BUILT_REPO_RPM"
+            rpmsign --addsign \
+                --define "_gpg_name ${GPG_KEY_ID}" \
+                --define "_gpg_digest_algo sha256" \
+                --define "_gpg_sign_cmd_extra_args ${RPM_GPG_EXTRA}" \
+                "$BUILT_REPO_RPM"
         fi
         cp -f "$BUILT_REPO_RPM" "$PUB_ROOT/obsidian-repo.rpm"
         cp -f "$BUILT_REPO_RPM" "$PUB_ROOT/$(basename "$BUILT_REPO_RPM")"
@@ -116,7 +179,11 @@ fi
 # Detach-sign repomd.xml if GPG is active
 if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
     echo "Detach-signing ${TARGET_DIR}/repodata/repomd.xml..."
-    gpg --batch --yes --detach-sign --armor --local-user "${GPG_KEY_ID}" --output "${TARGET_DIR}/repodata/repomd.xml.asc" "${TARGET_DIR}/repodata/repomd.xml"
+    DETACH_ARGS="--batch --yes --detach-sign --armor --pinentry-mode loopback --local-user ${GPG_KEY_ID}"
+    if [ -n "${GPG_PASSPHRASE:-}" ]; then
+        DETACH_ARGS="$DETACH_ARGS --passphrase ${GPG_PASSPHRASE}"
+    fi
+    gpg $DETACH_ARGS --output "${TARGET_DIR}/repodata/repomd.xml.asc" "${TARGET_DIR}/repodata/repomd.xml"
     echo "Signature generated: ${TARGET_DIR}/repodata/repomd.xml.asc"
 fi
 
