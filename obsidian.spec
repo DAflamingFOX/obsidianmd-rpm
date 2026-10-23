@@ -1,6 +1,8 @@
+%global debug_package %{nil}
+
 Name:           obsidian
-Version:        %{_version}
-Release:        %{_pkgrel}%{?dist}
+Version:        1.7.7
+Release:        1%{?dist}
 Summary:        The free and flexible app for your private thoughts.
 License:        Commercial
 URL:            https://obsidian.md/
@@ -10,8 +12,9 @@ Packager:       DAflamingFOX's Obsidian.md Repository
 Source0:        obsidian-%{version}.tar.gz
 Source1:        md.obsidian.Obsidian.desktop
 
-BuildArch:      x86_64
-Requires:       zlib, nss, alsa-lib, gtk3
+ExclusiveArch:  x86_64
+AutoReqProv:    no
+Requires:       gtk3, nss, alsa-lib, zlib, at-spi2-atk, libdrm, mesa-libgbm, libxkbcommon
 
 %description
 The free and flexible app for your private thoughts.
@@ -25,15 +28,25 @@ mkdir -p %{buildroot}/opt/Obsidian
 cp -r * %{buildroot}/opt/Obsidian/
 chmod +x %{buildroot}/opt/Obsidian/obsidian
 
-# Install the desktop shortcut
-mkdir -p %{buildroot}/usr/share/applications
-cp %{SOURCE1} %{buildroot}/usr/share/applications/
+# Create symlink in /usr/bin
+mkdir -p %{buildroot}%{_bindir}
+ln -s /opt/Obsidian/obsidian %{buildroot}%{_bindir}/obsidian
 
-# Install the icon from the resources folder
-mkdir -p %{buildroot}/usr/share/pixmaps
-cp resources/icon.png %{buildroot}/usr/share/pixmaps/obsidian.png
+# Install the desktop shortcut
+mkdir -p %{buildroot}%{_datadir}/applications
+cp %{SOURCE1} %{buildroot}%{_datadir}/applications/
+
+# Install the icon in standard hicolor directory
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/512x512/apps
+cp resources/icon.png %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/obsidian.png
+
+# Install the icon in pixmaps directory for compatibility
+mkdir -p %{buildroot}%{_datadir}/pixmaps
+cp resources/icon.png %{buildroot}%{_datadir}/pixmaps/obsidian.png
 
 %files
 /opt/Obsidian/
-/usr/share/applications/md.obsidian.Obsidian.desktop
-/usr/share/pixmaps/obsidian.png
+%{_bindir}/obsidian
+%{_datadir}/applications/md.obsidian.Obsidian.desktop
+%{_datadir}/icons/hicolor/512x512/apps/obsidian.png
+%{_datadir}/pixmaps/obsidian.png

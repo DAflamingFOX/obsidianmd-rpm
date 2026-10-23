@@ -1,0 +1,7 @@
+[obsidian]
+name=Obsidian Repository
+baseurl=https://daflamingfox.github.io/obsidianmd-rpm/x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://daflamingfox.github.io/obsidianmd-rpm/RPM-GPG-KEY-obsidian

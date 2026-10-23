@@ -6,35 +6,47 @@ This repository provides an automated build pipeline that tracks new releases of
 
 This allows Fedora, RHEL, CentOS, and openSUSE users to install and update Obsidian using their native package managers.
 
-## How to Install Obsidian
+## Installation
 
-1. Add the repository to your system
+### Method 1: Bootstrap RPM Package (Recommended)
 
-    Run the following command to create the repository file.
+Install the repository bootstrap package directly with `dnf`:
 
-    ```bash
-    echo -e "[obsidian]\nname=DAflamingFOX's Obsidian.md Repository\nbaseurl=https://daflamingfox.github.io/obsidianmd-rpm/x86_64/\nenabled=1\ngpgcheck=0" | sudo tee /etc/yum.repos.d/obsidian.repo
-    ```
+```bash
+sudo dnf install https://daflamingfox.github.io/obsidianmd-rpm/obsidian-repo.rpm
+sudo dnf install obsidian
+```
 
-2. Install Obisidian
+This installs the repository definition into `/etc/yum.repos.d/obsidian.repo` and the GPG public key into `/etc/pki/rpm-gpg/RPM-GPG-KEY-obsidian`.
 
-    Depending on your distribution's package manager, run the following commands:
+### Method 2: Manual Repository Configuration
 
-    - **`dnf`** package manager
+Alternatively, download the `.repo` configuration file directly:
 
-        ```bash
-        sudo dnf update
-        sudo dnf install obsidian
-        ```
-    - **`yum`** package manager
+```bash
+sudo curl -sLo /etc/yum.repos.d/obsidian.repo https://daflamingfox.github.io/obsidianmd-rpm/obsidian.repo
+sudo dnf install obsidian
+```
 
+Or manually create `/etc/yum.repos.d/obsidian.repo` with the following configuration:
 
-        ```bash
-        sudo yum update
-        sudo yum install obsidian
-        ```
+```ini
+[obsidian]
+name=Obsidian Repository
+baseurl=https://daflamingfox.github.io/obsidianmd-rpm/x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://daflamingfox.github.io/obsidianmd-rpm/RPM-GPG-KEY-obsidian
+```
 
-Updates to Obsidian will now be handled automatically whenever you run your standard system updates.
+Then install Obsidian:
+
+```bash
+sudo dnf install obsidian
+```
+
+Updates to Obsidian will be handled automatically whenever you run standard system updates (`sudo dnf upgrade`).
 
 ## License
 
